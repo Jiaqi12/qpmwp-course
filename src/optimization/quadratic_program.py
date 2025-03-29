@@ -263,3 +263,76 @@ class QuadraticProgram():
         q = self.problem_data['q']
 
         return (0.5 * (x @ P @ x) + q @ x).item() + constant
+
+    def linearize_turnover_constraint(self, x_init: np.ndarray, to_budget=float('inf')) -> None:
+        """
+        Linearize the turnover constraint in the quadratic programming problem.
+        """
+        n = len(self.problem_data['q'])  # Number of original decision variables
+        m = 0 if self.problem_data.get('G') is None else self.problem_data['G'].shape[0]
+
+        # Number of new auxiliary variables
+        n_aux = n  
+
+        # Total number of variables after expansion
+        total_vars = n + n_aux
+
+        # Expand P (quadratic cost matrix) to accommodate auxiliary variables
+        P = np.block([
+            [self.problem_data['P'], np.zeros((n, n_aux))],
+            [np.zeros((n_aux, n)), np.zeros((n_aux, n_aux))]
+        ])
+
+        # Expand q (linear term) to match variable expansion
+        q = np.concatenate([self.problem_data['q'], np.zeros(n_aux)])
+
+        # Expand G and h for turnover constraints
+        G_old = self.problem_data['G'] if self.problem_data['G'] is not None else np.zeros((0, n))
+        h_old = self.problem_data['h'] if self.problem_data['h'] is not None else np.zeros(0)
+
+        # Ensure G_old has the correct shape
+        if G_old.shape[0] > 0:
+            G_old = np.hstack([G_old, np.zeros((G_old.shape[0], n_aux))])  # Expand columns
+
+        # Constraints for turnover: |x_i - x_init_i| <= u_i
+        G_aux_pos = np.hstack([np.eye(n), -np.eye(n_aux)])  # x - u <= x_init
+        G_aux_neg = np.hstack([-np.eye(n), -np.eye(n_aux)])  # -x - u <= -x_init
+
+        # Turnover budget constraint: sum(u) <= to_budget
+        G_turnover = np.hstack([np.zeros((1, n)), np.ones((1, n_aux))])
+
+        # **Fix: Ensure the expanded G matches the new variable count**
+        G = np.vstack([
+            G_old,        # (m, n + n_aux)
+            G_aux_pos,    # (n, n + n_aux)
+            G_aux_neg,    # (n, n + n_aux)
+            G_turnover    # (1, n + n_aux)
+        ])
+        
+        h = np.concatenate([
+            h_old,       # Original constraints
+            x_init,      # x - u <= x_init
+            -x_init,     # -x - u <= -x_init
+            [to_budget]  # sum(u) <= to_budget
+        ])
+
+        # Expand lower and upper bounds
+        lb = np.concatenate([self.problem_data['lb'], np.zeros(n_aux)])  # lb for u = 0
+        ub = np.concatenate([self.problem_data['ub'], np.ones(n_aux)])  # ub for u = 1
+
+        # **Debugging: Print Final Dimensions**
+        print(f"Final G shape: {G.shape}")  # Should be (20 + 2*10 + 1, 20) = (41, 20)
+        print(f"Final h shape: {h.shape}")  # Should be (41,)
+        print(f"Final lb shape: {lb.shape}")  # Should be (20,)
+        print(f"Final ub shape: {ub.shape}")  # Should be (20,)
+
+        # Override problem data
+        self.update_problem_data({
+            'P': P,
+            'q': q,
+            'G': G,
+            'h': h,
+            'lb': lb,
+            'ub': ub
+        })
+        return None
