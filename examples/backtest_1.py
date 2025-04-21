@@ -30,8 +30,12 @@ import pandas as pd
 
 
 # Add the project root directory to Python path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-src_path = os.path.join(project_root, 'src')
+# project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# src_path = os.path.join(project_root, 'src')
+# sys.path.append(project_root)
+# sys.path.append(src_path)
+project_root = os.path.dirname(os.path.dirname(os.getcwd()))   #<Change this path if needed>
+src_path = os.path.join(project_root, 'qpmwp-course/src')
 sys.path.append(project_root)
 sys.path.append(src_path)
 
